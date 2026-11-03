@@ -1,0 +1,3 @@
+invoice_id,customer,issued_date,due_date,amount_gbp,status
+INV001,Studio Fern,2026-10-11,2026-10-25,120.00,unpaid
+INV002,Willow Books,2026-10-27,2026-11-10,85.00,unpaid

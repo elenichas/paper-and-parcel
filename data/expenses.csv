@@ -1,0 +1,4 @@
+expense_id,date,category,description,amount_gbp
+E001,2026-10-01,Website,Fictional monthly storefront subscription,15.00
+E002,2026-10-14,Packaging,Boxes and tissue paper,28.00
+E003,2026-10-21,Advertising,Fictional social media campaign,35.00

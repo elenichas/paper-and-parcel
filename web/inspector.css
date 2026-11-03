@@ -1,0 +1,71 @@
+/* The inspector shares the same semantic palette and control sizes as the shop. */
+.inspector-card { min-width: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--separator); border-radius: var(--radius); box-shadow: var(--shadow); }
+.inspector-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; }
+.inspector-heading h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.025em; }
+.run-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 5px 9px; border-radius: 7px; color: var(--secondary); background: var(--surface-secondary); font-size: .75rem; font-weight: 500; }
+.run-badge.completed { color: var(--success); background: var(--success-soft); }
+.run-badge.running, .run-badge.sending { color: var(--accent); background: var(--accent-soft); }
+.run-badge.error, .run-badge.cancelled { color: var(--error); background: var(--error-soft); }
+.inspector-config { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 24px; border-block: 1px solid var(--separator); background: var(--surface-secondary); color: var(--secondary); font: .75rem/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace; overflow-wrap: anywhere; }
+.run-controls { padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; border-bottom: 1px solid var(--separator); }
+.run-controls label { grid-column: 1 / -1; font-size: .8125rem; color: var(--secondary); }
+.run-controls select { min-width: 0; font-size: .8125rem; }
+.run-controls button { color: var(--accent); font-size: .8125rem; white-space: nowrap; }
+.inspector-empty { padding: 48px 28px; text-align: center; }
+.inspector-empty h3 { margin: 0 0 8px; font-size: 1.0625rem; }
+.inspector-empty p { color: var(--secondary); font-size: .9375rem; line-height: 1.6; max-width: 370px; margin: 0 auto; }
+.inspector-empty button { margin-top: 24px; color: var(--accent); background: var(--surface-secondary); border-color: transparent; font-size: .875rem; }
+.inspector-empty button span { padding-left: 5px; }
+.execution-route { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 22px 24px 18px; }
+.execution-route span { color: var(--secondary); background: var(--surface-secondary); font-size: .75rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--separator); }
+.execution-route span.done { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.execution-route span.current { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.execution-route i { font-style: normal; font-size: .8125rem; color: var(--secondary); }
+.run-question { padding: 0 24px 22px; }
+.run-question > span { font-size: .75rem; font-weight: 600; color: var(--secondary); }
+.run-question p { margin: 7px 0 10px; font-size: 1rem; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.run-question small { font: .6875rem/1.6 ui-monospace, "SFMono-Regular", Menlo, monospace; color: var(--secondary); overflow-wrap: anywhere; }
+.run-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0 24px 24px; padding: 18px; background: var(--surface-secondary); border-radius: 10px; }
+.run-metrics strong { display: block; font-size: 1.625rem; font-weight: 650; letter-spacing: -.03em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.run-metrics span { display: block; color: var(--secondary); font-size: .75rem; line-height: 1.5; margin-top: 5px; }
+.execution-timeline { padding: 0 24px; }
+.execution-step { border: 1px solid var(--separator); border-radius: 10px; margin-bottom: 10px; overflow: hidden; background: var(--surface); min-width: 0; }
+.execution-step summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 16px; min-height: 56px; }
+.execution-step summary:hover { background: var(--surface-secondary); }
+.execution-step summary::-webkit-details-marker { display: none; }
+.execution-step summary::after { content: "⌄"; color: var(--secondary); flex-shrink: 0; font-size: 1rem; }
+.execution-step[open] summary::after { transform: rotate(180deg); }
+.step-heading { min-width: 0; flex: 1; font-size: .875rem; font-weight: 500; overflow-wrap: anywhere; }
+.step-heading code { font-size: .8125rem; }
+.step-heading small { display: block; margin-top: 5px; color: var(--secondary); font-size: .75rem; font-weight: 400; }
+.execution-step time, .execution-notice time { margin-left: auto; white-space: nowrap; color: var(--secondary); font: .6875rem/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.execution-detail { min-width: 0; padding: 18px 16px; border-top: 1px solid var(--separator); background: var(--surface); }
+.execution-detail p { color: var(--secondary); font-size: .875rem; line-height: 1.65; margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.execution-detail .inspector-final-answer { color: var(--text); font-size: .9375rem; }
+.json-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--secondary); font-size: .6875rem; font-weight: 600; margin: 16px 0 9px; }
+.json-label span { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-weight: 400; }
+.inspector-json { background: var(--code-background); color: var(--code-text); border: 1px solid var(--separator); border-radius: 8px; margin: 0; padding: 14px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .8125rem/1.65 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; scrollbar-width: thin; }
+.inspector-json.json-error { background: var(--error-soft); color: var(--error); }.step-error { border-color: var(--error); }
+.source-files, .model-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+.source-files span, .model-detail-tags span { border-radius: 5px; padding: 4px 7px; font: .6875rem/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace; background: var(--surface-secondary); color: var(--secondary); overflow-wrap: anywhere; }
+.token-note { color: var(--secondary); font-size: .75rem; }
+.execution-notice { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--separator); border-radius: 10px; padding: 16px; margin-bottom: 12px; background: var(--warning-soft); color: var(--warning); }
+.execution-notice strong { font-size: .875rem; font-weight: 600; }.execution-notice p { margin: 5px 0 0; font-size: .8125rem; line-height: 1.65; color: var(--text); }.notice-error { background: var(--error-soft); color: var(--error); }
+.raw-step { margin: 18px 24px 0; }.raw-events { max-height: 360px; }
+.inspector-footnote { font-size: .75rem; line-height: 1.6; color: var(--secondary); padding: 0 24px; margin: 16px 0 24px; }
+.inspector-section-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 24px 24px 0; }
+.inspector-section-title h2 { margin: 0; }.inspector-section-title > span { color: var(--secondary); font-size: .75rem; }
+.inspector-explainer { padding: 0 24px; margin: 12px 0 20px; color: var(--secondary); font-size: .875rem; line-height: 1.65; }
+.tool-catalog #inspector-catalog { padding: 0 24px 14px; }
+.catalog-used .step-heading small { color: var(--success); }
+.agent-instructions > summary { padding: 20px 24px; min-height: 60px; color: var(--text); font-size: .875rem; font-weight: 500; }
+.agent-instructions > div { padding: 0 24px 24px; }.system-prompt { max-height: 360px; }
+.inspector-waiting { padding: 16px; margin: 0 0 16px; background: var(--surface-secondary); color: var(--secondary); border-radius: 8px; font-size: .875rem; }
+body.inspecting .period-control { display: none; }
+@media (max-width: 1250px) and (min-width: 1001px) { .run-controls label { width: 100%; }.run-controls button { padding-inline: 10px; }.inspector-config { gap: 8px 12px; } }
+@media (max-width: 760px) {
+  .inspector-heading, .run-controls { padding: 20px; }.inspector-heading h2 { font-size: 1.125rem; }.run-controls button { padding-inline: 12px; }
+  .inspector-config { padding-inline: 20px; }.execution-route { padding: 20px; gap: 6px; }.run-question { padding-inline: 20px; }.run-metrics { margin-inline: 20px; gap: 10px; padding: 16px; }.run-metrics strong { font-size: 1.5rem; }
+  .execution-timeline { padding-inline: 14px; }.execution-step summary { gap: 8px; padding: 14px 12px; }.step-heading code { font-size: .75rem; }.raw-step { margin-inline: 14px; }.inspector-footnote { padding-inline: 20px; }.inspector-section-title, .inspector-explainer { padding-inline: 20px; }.tool-catalog #inspector-catalog { padding-inline: 14px; }
+}
+@media (forced-colors: active) { .inspector-card, .execution-step, .inspector-json { border-color: CanvasText; }.execution-route span.done { border-color: CanvasText; } }

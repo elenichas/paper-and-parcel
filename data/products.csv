@@ -1,0 +1,6 @@
+product_id,name,price_gbp,unit_cost_gbp,opening_stock,reorder_level
+NB01,Dotted Notebook,8.50,3.20,20,8
+PL01,Weekly Planner,16.00,6.00,20,5
+PN01,Black Ink Pen,3.00,0.80,60,20
+ST01,Botanical Sticker Sheet,4.50,1.00,30,10
+GC01,Greeting Card,2.50,0.60,40,10
