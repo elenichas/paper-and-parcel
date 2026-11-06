@@ -17,10 +17,13 @@
   </script>
   <title>Paper & Parcel — Shop workspace</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=stock-notice-1">
   <link rel="stylesheet" href="/static/inspector.css">
-  <script src="/static/inspector.js" defer></script>
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/learning.css">
+  <link rel="stylesheet" href="/static/developer.css">
+  <script src="/static/inspector.js?v=request-context-1" defer></script>
+  <script src="/static/learning.js" defer></script>
+  <script src="/static/app.js?v=stock-notice-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -32,12 +35,14 @@
     <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24"><path d="m10.3 4.5-8 13.8A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-2.7l-8-13.8a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3V4Zm9 2v15"/></symbol>
     <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 15a3 3 0 0 1-3 3H9l-5 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v9Z"/></symbol>
     <symbol id="i-compose" viewBox="0 0 24 24"><path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l1-5 7-7 5 5-7 7-6 1Z"/></symbol>
   </svg>
 
+  <div id="app-surface" class="app-surface">
   <aside class="sidebar" aria-label="Workspace navigation">
     <div class="sidebar-header">
     <a class="brand" href="#overview" aria-label="Paper and Parcel overview">
@@ -55,10 +60,11 @@
     </nav>
     <div class="workspace-label learn-label" id="agent-navigation-label">Agent</div>
     <nav class="nav-list" aria-labelledby="agent-navigation-label">
-    <a class="nav-item" href="#agent-inspector" data-view="agent-inspector"><svg aria-hidden="true"><use href="#i-code"/></svg>Agent inspector</a>
+    <a class="nav-item" href="#learning-lab" data-view="learning-lab"><svg aria-hidden="true"><use href="#i-book"/></svg>Learning lab</a>
     <a class="nav-item" href="#how-it-works" data-view="how-it-works"><svg aria-hidden="true"><use href="#i-book"/></svg>How it works</a>
     </nav>
     <div class="appearance-control"><label for="appearance-select">Appearance</label><div class="select-control"><select id="appearance-select"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div>
+    <button class="developer-launcher" type="button" data-inspector-toggle aria-controls="developer-panel" aria-expanded="false"><svg aria-hidden="true"><use href="#i-code"/></svg><span>Developer tools</span><kbd>Ctrl `</kbd></button>
     </div>
   </aside>
 
@@ -82,8 +88,6 @@
 
         <section class="assistant-panel" aria-labelledby="assistant-title">
           <div class="assistant-header"><div><h2 id="assistant-title">Shop assistant</h2></div><button class="icon-button new-chat" id="new-chat" title="Start a new conversation" aria-label="Start a new conversation"><svg aria-hidden="true"><use href="#i-compose"/></svg></button></div>
-          <div class="assistant-model"><span>Qwen3 4B · Runs on your Mac</span></div>
-          <div class="chat-view-switch" role="group" aria-label="Workspace view"><button id="chat-view-button" type="button" aria-pressed="true">Shop</button><button id="inspector-view-button" type="button" aria-pressed="false">Agent inspector</button></div>
           <div class="chat-messages" id="chat-messages" role="log" aria-label="Conversation" aria-live="polite">
             <div class="chat-welcome" id="chat-welcome"><h3>Ask about your business</h3><p>Check sales, profit, stock, or invoices.</p><div class="suggestions"><button data-question="How did we do in October? Give me revenue and profit."><span>How did we do in October?</span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button><button data-question="Which products should we restock?"><span>What should we restock?</span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button><button data-question="Who has overdue invoices and how much do they owe?"><span>Who has overdue invoices?</span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
           </div>
@@ -93,5 +97,8 @@
       <footer class="page-footer"><span>Demo date: 3 Nov 2026 · All amounts in GBP</span></footer>
     </main>
   </div>
+  </div>
+  <button class="developer-peek" type="button" data-inspector-toggle aria-controls="developer-panel" aria-expanded="false"><span aria-hidden="true">&gt;_</span> Inspect</button>
+  <aside id="developer-panel" class="developer-panel" aria-labelledby="developer-title" hidden></aside>
 </body>
 </html>

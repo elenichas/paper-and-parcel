@@ -1,4 +1,4 @@
-"""The LangChain agent: our local model plus the four business tools."""
+"""The LangChain chat agent: local model, business records, and chart tools."""
 
 import json
 import time
@@ -9,7 +9,9 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import StructuredTool, ToolException
 from langchain_ollama import ChatOllama
 
+from shop.analysis import aggregate_sales, describe_sales_dataframe, require_october
 from shop.guidance import redirect_to_shop
+from shop.learning_schemas import ChartResult
 from shop.scope import SCOPE_PROMPT, classify_scope
 from shop.tools import (
     get_profit_summary,
@@ -26,13 +28,15 @@ MODEL_MAX_TOKENS = 768
 BUSINESS_FUNCTIONS = (
     get_sales_summary, get_profit_summary, get_unpaid_invoices, get_stock_status,
 )
-AGENT_FUNCTIONS = (*BUSINESS_FUNCTIONS, redirect_to_shop)
+AGENT_FUNCTIONS = (*BUSINESS_FUNCTIONS, describe_sales_dataframe, aggregate_sales, redirect_to_shop)
 TOOL_SOURCES = {
     "get_sales_summary": ["data/sales.csv", "data/products.csv"],
     "get_profit_summary": ["data/sales.csv", "data/products.csv", "data/expenses.csv"],
     "get_unpaid_invoices": ["data/invoices.csv"],
     "get_stock_status": ["data/products.csv", "data/sales.csv"],
     "redirect_to_shop": [],
+    "describe_sales_dataframe": ["data/sales.csv", "data/products.csv"],
+    "aggregate_sales": ["data/sales.csv", "data/products.csv"],
 }
 SYSTEM_PROMPT = """You are the business assistant for Paper & Parcel, a fictional
 online stationery shop. Today in this demo is 3 November 2026. "Last month" is
@@ -43,8 +47,20 @@ Use the provided tools for ALL questions about the shop's sales, revenue, profit
 expenses, products, inventory or invoices. Never guess business figures. Choose
 the appropriate tool, wait for its result, then answer using those facts. You may
 call multiple tools if a question needs them. Use tool errors to explain missing
-data; missing data is not zero activity. There are four business tools plus the
-redirect_to_shop guidance tool.
+data; missing data is not zero activity. There are four business tools, two
+pandas chart tools, and the redirect_to_shop guidance tool.
+
+For a sales chart, inspect describe_sales_dataframe, then call aggregate_sales.
+Only create a chart if the latest message asks for one. A plain revenue or
+profit question needs a business answer, even after earlier chart requests.
+Choose group_by='product' for comparisons or 'date' for daily trends; choose
+metric='revenue' or 'units'. Products use chart_type='bar'; daily trends use 'line'.
+The frontend draws the chart from this tool's validated data. You MUST call
+aggregate_sales for a chart; a sales summary alone cannot produce a chart.
+Only October 2026 sales charts are available. Do not claim to chart profit,
+stock, invoices, or missing periods. If the desired chart is unclear, call
+redirect_to_shop(reason='chart_clarification'). Do not invent chart values.
+Explain the chart in at most two sentences; do not list every plotted value.
 
 Stay within the shop assistant's scope. For unrelated requests (including weather,
 news, travel, recipes, coding, or general trivia), call redirect_to_shop with
@@ -74,6 +90,9 @@ alongside the verified shop answer. The app displays suggested questions itself.
 For a follow-up business question, call a tool AGAIN for that question. Previous
 assistant replies are conversation context, not authoritative business records.
 """
+
+class AgentAnswerError(RuntimeError):
+    """An actionable answer failure, distinct from a model connection problem."""
 
 def _is_small_talk(message: str) -> bool:
     """Only simple greetings may bypass both record lookup and scope guidance."""
@@ -139,7 +158,7 @@ async def stream_answer(message: str, history: list[dict] | None = None):
     yield {"type": "scope_start", "model": MODEL}
     route = await classify_scope(message, history or [])
     yield {"type": "scope_result", "route": route}
-    if route in {"outside_scope", "unsupported_action", "capabilities"}:
+    if route in {"outside_scope", "unsupported_action", "capabilities", "chart_clarification"}:
         guidance = redirect_to_shop(route)
         yield {"type": "guidance", "name": "redirect_to_shop", "source": "application", **guidance}
         yield {
@@ -148,10 +167,21 @@ async def stream_answer(message: str, history: list[dict] | None = None):
             "suggested_questions": guidance["suggested_questions"], "response_kind": "guidance",
         }
         return
+    if route == "chart":
+        # Reuse the same period guard as the Learning Lab. A missing period
+        # must never silently become a chart of October's data.
+        try:
+            require_october(message)
+        except ValueError as error:
+            guidance = redirect_to_shop("chart_clarification")
+            yield {"type": "guidance", "name": "redirect_to_shop", "source": "application", **guidance}
+            yield {"type": "answer", "reply": str(error), "tool_calls": [], "duration_seconds": round(time.monotonic() - started, 1), "model": MODEL, "suggested_questions": guidance["suggested_questions"], "response_kind": "guidance"}
+            return
     messages = list(history or []) + [{"role": "user", "content": message}]
     calls = []
     records_checked = False
     guidance = None
+    chart_data = None
     final_answer = ""
     model_step = 0
     pending_tools = set()
@@ -188,6 +218,7 @@ async def stream_answer(message: str, history: list[dict] | None = None):
                         if item.name in {
                             "get_sales_summary", "get_profit_summary",
                             "get_unpaid_invoices", "get_stock_status",
+                            "aggregate_sales",
                         }:
                             records_checked = True
                         try:
@@ -196,6 +227,8 @@ async def stream_answer(message: str, history: list[dict] | None = None):
                             result = {"message": item.content}
                         if item.name == "redirect_to_shop" and item.status != "error":
                             guidance = result
+                        if item.name == "aggregate_sales" and item.status != "error":
+                            chart_data = result
                         yield {
                             "type": "tool_result", "id": item.tool_call_id,
                             "name": item.name, "result": result,
@@ -206,7 +239,7 @@ async def stream_answer(message: str, history: list[dict] | None = None):
                 if node_name == "tools" and not pending_tools:
                     model_step += 1
                     yield {"type": "model_start", "step": model_step, "attempt": attempt + 1}
-        if records_checked or guidance or _is_small_talk(message):
+        if (chart_data if route == "chart" else records_checked) or guidance or _is_small_talk(message):
             break
         if attempt == 0:
             yield {"type": "status", "phase": "verification", "message": "Checking which shop tools can help with this request…"}
@@ -214,6 +247,7 @@ async def stream_answer(message: str, history: list[dict] | None = None):
                 "role": "user",
                 "content": (
                     f"Verify this question: {message}\n"
+                    + ("A chart requires describe_sales_dataframe and aggregate_sales. Call them now; the browser needs their actual chart data. " if route == "chart" else "") +
                     "You MUST call the relevant tool before answering. For shop "
                     "questions, use a business tool (including for missing months). "
                     "For unrelated questions, call redirect_to_shop instead of "
@@ -222,17 +256,28 @@ async def stream_answer(message: str, history: list[dict] | None = None):
                 ),
             })
     else:
-        raise RuntimeError("The model couldn't verify its answer against the shop records.")
+        if route == "chart":
+            guidance = redirect_to_shop("chart_clarification")
+            guidance["reply"] = "I couldn’t generate that chart. Please choose one of these supported sales charts."
+        else:
+            raise AgentAnswerError("I couldn’t verify an answer against the shop records. Try asking about October sales, profit, stock, or unpaid invoices.")
 
     # A scope redirect is a successful result. Use our wording so a model cannot
     # replace it with a fabricated forecast or an unhelpful generic refusal.
-    if guidance and not records_checked:
+    guidance_only = bool(guidance and not chart_data and (not records_checked or route == "chart"))
+    if guidance_only:
         final_answer = guidance["reply"]
+    if chart_data and not final_answer.strip():
+        final_answer = "Here is the chart calculated from October’s paid sales records."
     if not final_answer.strip():
-        raise RuntimeError("The model did not finish an answer. Please try a shorter question.")
+        raise AgentAnswerError("The model did not finish an answer. Please try asking one shop question at a time.")
+    artifact = ChartResult(answer=final_answer, **chart_data).model_dump(mode="json") if chart_data else None
+    if artifact:
+        yield {"type": "validation", "name": "ChartResult", "valid": True, "output": artifact, "schema": ChartResult.model_json_schema()}
     yield {
         "type": "answer", "reply": final_answer, "tool_calls": calls,
         "duration_seconds": round(time.monotonic() - started, 1), "model": MODEL,
         "suggested_questions": guidance["suggested_questions"] if guidance else [],
-        "response_kind": "guidance" if guidance and not records_checked else "answer",
+        "response_kind": "guidance" if guidance_only else "answer",
+        **({"artifact": artifact, "response_kind": "chart"} if artifact else {}),
     }

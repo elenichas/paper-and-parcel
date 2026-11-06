@@ -26,15 +26,23 @@ Press Ctrl+C in its terminal to stop the app. A pre-existing Ollama process is
 left running; an Ollama process started by this launcher is stopped with the app.
 
 The app includes overview, sales/profit, inventory, and invoice views; a chat
-assistant with recent conversation context; and expandable cards showing the
-actual tool inputs and results. The **How it works** view explains the full flow.
-Use **Agent inspector** above the chat, or **Agent inspector** in the navigation,
-to switch to a live execution view without losing the conversation.
+assistant with recent conversation context. The **How it works** view explains
+the full flow. Select **Inspect** or **Developer tools** to open a separate dark
+developer drawer alongside the app, without leaving the current view or chat.
+It records actual API activity, model calls, tool data and validation.
+The **Learning lab** adds an October report chain, a SQLite agent, pandas charts,
+and an explicit LangGraph workflow. Each action shows its real inputs, outputs,
+model/tool decisions and Pydantic validation alongside the frontend result.
+Sales charts also work in the ordinary chat. Ask for October revenue by product,
+daily revenue, or units sold by product. An unclear graph request offers three
+clickable chart choices. The chat renders the actual validated pandas results.
+See the [Learning Lab walkthrough](docs/learning-lab.md) for the course concept
+map, example questions and terminal tracing commands.
 Everything in this demo runs locally using fictional CSV records and the
 downloaded model. No external financial service or paid model API is connected.
 The model download and local Python environment are not part of this repository.
 
-![Paper & Parcel running locally](docs/apple-ui-preview.jpg)
+![Frontend report with the independent developer console](docs/developer-panel-preview.png)
 
 Try these questions:
 
@@ -281,7 +289,7 @@ separate from our shop's CSV files.
 ## Step 4: the LangChain agent
 
 `shop/agent.py` connects `ChatOllama` to the four business functions using
-LangChain's `create_agent`, plus a `redirect_to_shop` guidance function. Its system prompt describes the shop, the fixed demo
+LangChain's `create_agent`, plus two pandas chart tools and a `redirect_to_shop` guidance function. Its system prompt describes the shop, the fixed demo
 date, the available data, and the need to consult records for business answers.
 
 ```text
@@ -306,8 +314,8 @@ answer. The expandable tool cards let you inspect the source facts.
 ### Requests outside the shop's scope
 
 A separate local model call in `shop/scope.py` returns a structured route before
-the shop agent runs: shop, outside scope, unsupported action, capabilities, or
-small talk. For unsupported topics or actions, the app calls `redirect_to_shop`
+the shop agent runs: shop, chart, chart clarification, outside scope, unsupported
+action, capabilities, or small talk. For unsupported topics or actions, the app calls `redirect_to_shop`
 directly and returns its wording and three clickable questions. This is a normal
 successful response, not a server error, and accesses no shop records. It does
 not depend on the main agent remembering to select a guidance tool.
@@ -395,7 +403,7 @@ node --check web/app.js
 .venv/bin/python -m pip check
 ```
 
-All 22 automated tests passed. These include the original financial/date checks,
+All 42 automated tests passed. These include the original financial/date checks,
 HTTP input validation, JSON/stream responses, history handling, and regression
 checks that withhold unsupported drafts, redirect unrelated questions after shop
 history, offer alternatives for unsupported actions, and preserve missing-data
@@ -404,11 +412,35 @@ agent; separate real-model checks exercise the local Ollama connection and actua
 tool decisions. Chrome checks cover the dashboard views, chart control, chat,
 tool evidence, follow-ups, and a 390-pixel mobile layout.
 
+Learning Lab checks additionally cover SQL totals and read-only enforcement,
+bounded query results, database rebuilding, pandas product/daily aggregates,
+chart invariants, real sequence/parallel graph execution, withheld invalid
+structured output, conditional guidance routing, and the learning SSE API.
+Real-model checks are separate from these deterministic unit tests.
+
 ### Agent inspector
 
-The inspector uses the same streamed events as the chat; it does not simulate a
-separate agent or make extra model calls. Each new question creates a request
-with a backend-generated ID and event timestamps. It shows:
+Open **Inspect** at the bottom right, **Developer tools** in the navigation, or
+press **Ctrl + `**. The drawer is a separate developer surface, not a shop page.
+Dock it right or below the app; narrow windows automatically use the bottom.
+Drag its divider, or focus the divider and use the arrow keys, to resize it.
+Close it without losing the conversation or request history. Its dark theme is
+independent of the shop appearance.
+
+**Console** shows real API fetches and backend-streamed agent events in order.
+Filter by category or text, pause display updates while recording continues,
+or turn off Follow to read earlier events. Expanding an agent row reveals its
+JSON and an **Inspect request** link to the matching trace. **Clear** clears the
+console display, keeping request traces. The console retains up to 600 entries.
+Row times are seconds since page load; expanded agent events also contain the
+backend request ID and elapsed time. Dock size, position, open state and selected
+developer view are remembered locally across reloads.
+
+**Request trace** uses the same streamed events as the chat and Learning Lab;
+it does not simulate a separate agent or make extra model calls. Each new
+question creates a request with a backend-generated ID and event timestamps.
+**Tools & setup** shows actual registered functions and model instructions.
+Together, these views show:
 
 - The message and trimmed conversation actually passed to the agent.
 - Model calls and reported token usage when the model supplies it.
@@ -417,10 +449,13 @@ with a backend-generated ID and event timestamps. It shows:
 - Verification retries, the final answer, and stopped or failed requests.
 - The available tool schemas and this app's system prompt/model configuration.
 
-Select earlier runs from **Inspect a request**, or use **Download JSON** to keep
+Select earlier runs from **Inspect a request**, or use **Export JSON** to keep
 a trace. The last 12 requests are kept in this tab's memory until a page reload;
 starting a new chat clears the conversation while keeping those inspection runs.
-Requests made before the inspector was loaded cannot be reconstructed.
+Recording starts when the page loads, including while the drawer is closed.
+Reloading the page clears its browser memory. API rows time response headers;
+streamed events show the subsequent work and final request duration. This is a
+viewer for this browser page's activity, not a shell or a server-wide log viewer.
 
 Backend timestamps measure when events were emitted, not Python CPU execution
 time. Parallel tool results are grouped into one subsequent model call. The

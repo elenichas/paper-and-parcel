@@ -144,12 +144,17 @@ main { padding: 32px 32px 0; max-width: 1760px; margin: auto; }
 .bar-value { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .chart-footer { padding: 0 24px 20px; color: var(--secondary); font-size: .75rem; }
 .legend-square { display: none; }
-.stock-nudge { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border: 1px solid var(--separator); border-radius: var(--radius); background: var(--warning-soft); }
-.stock-nudge h3 { color: var(--warning); margin: 0 0 3px; font-size: .875rem; }
-.stock-nudge p { margin: 0; font-size: .8125rem; color: var(--text); }
+.stock-nudge { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border: 1px solid var(--separator); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.stock-nudge h3 { color: var(--text); margin: 0 0 3px; font-size: .875rem; }
+.stock-nudge p { margin: 0; font-size: .8125rem; color: var(--secondary); }
+.stock-warning { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; }
+.stock-status-icon { width: 20px; height: 20px; align-self: start; margin-top: 2px; color: var(--warning); }
+.stock-warning > div { min-width: 0; }
 .text-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 0; color: var(--accent); background: transparent; font-size: .8125rem; padding: 8px; text-align: left; }
 .text-button svg { width: 16px; height: 16px; }
 .stock-nudge .text-button { margin-left: auto; flex-shrink: 0; }
+.app-tiny .stock-warning { grid-template-columns: 20px minmax(0, 1fr); }
+.app-tiny .stock-warning .text-button { grid-column: 2; justify-self: start; margin-left: 0; padding-inline: 0; }
 .table-wrap { overflow-x: auto; scrollbar-width: thin; }
 .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .8125rem; }
 .data-table th { padding: 19px 24px 11px; border-bottom: 1px solid var(--separator); font-weight: 500; color: var(--secondary); font-size: .75rem; text-transform: none; white-space: nowrap; }

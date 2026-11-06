@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from shop.agent import _business_tool
+from shop.agent import AgentAnswerError, _business_tool
 from shop.server import app
 from shop.tools import get_profit_summary
 
@@ -72,6 +72,17 @@ class ServerTests(unittest.TestCase):
             self.client.post("/api/chat", json={"message": "And profit?", "history": history})
         self.assertEqual(received[0], ("And profit?", history))
 
+    def test_unverified_answer_error_does_not_blame_ollama_connection(self):
+        async def unverified(message, history):
+            raise AgentAnswerError("I couldn’t verify an answer against the shop records.")
+            yield
+        with patch("shop.server.stream_answer", unverified):
+            response = self.client.post("/api/chat/stream", json={"message": "Show me something"})
+        events = [json.loads(block[6:]) for block in response.text.strip().split("\n\n")]
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertIn("verify", events[-1]["message"])
+        self.assertNotIn("Ollama", events[-1]["message"])
+
     def test_unknown_month_becomes_explanatory_tool_error(self):
         result = _business_tool(get_profit_summary).invoke({"month": "2026-11"})
         self.assertIn("unavailable", result)
@@ -80,7 +91,9 @@ class ServerTests(unittest.TestCase):
         definition = self.client.get("/api/agent").json()
         self.assertEqual(definition["model"], "qwen3:4b-instruct")
         tools = {tool["name"]: tool for tool in definition["tools"]}
-        self.assertEqual(len(tools), 5)
+        self.assertEqual(len(tools), 7)
+        self.assertIn("aggregate_sales", tools)
+        self.assertIn("describe_sales_dataframe", tools)
         self.assertEqual(tools["get_profit_summary"]["input_schema"]["properties"]["month"]["default"], "2026-10")
         self.assertIn("data/expenses.csv", tools["get_profit_summary"]["source_files"])
         self.assertEqual(tools["redirect_to_shop"]["purpose"], "guidance")

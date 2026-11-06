@@ -43,6 +43,11 @@ $(".skip-link").addEventListener("click", (event) => {
 });
 document.querySelectorAll("[data-focus-chat]").forEach((button) => button.addEventListener("click", () => {
   setNavigation(false);
+  if (document.body.classList.contains("learning")) {
+    window.addEventListener("hashchange", () => $("#chat-input").focus(), {once: true});
+    location.hash = "overview";
+    return;
+  }
   $(".assistant-panel").scrollIntoView({behavior: "instant", block: window.innerWidth <= 760 ? "start" : "nearest"});
   $("#chat-input").focus({preventScroll: true});
 }));
@@ -52,7 +57,7 @@ const viewTitles = {
   inventory: ["Products & stock", "Products & stock", "Stock after October’s paid sales."],
   invoices: ["Invoices", "Invoices", "Unpaid wholesale invoices, as of 3 November 2026."],
   "how-it-works": ["How it works", "How it works", "Follow a question from your browser to your shop’s records."],
-  "agent-inspector": ["Agent inspector", "Agent inspector", "Inspect requests, tool calls, and returned data."],
+  "learning-lab": ["Learning lab", "Learning lab", "Run course concepts and follow their execution from input to interface."],
 };
 const toolLabels = {
   get_sales_summary: "Read sales records",
@@ -60,6 +65,8 @@ const toolLabels = {
   get_unpaid_invoices: "Check unpaid invoices",
   get_stock_status: "Check product stock",
   redirect_to_shop: "Suggest supported questions",
+  describe_sales_dataframe: "Inspect sales data",
+  aggregate_sales: "Calculate chart values",
 };
 
 let data = null;
@@ -70,7 +77,9 @@ let activeController = null;
 let history = [];
 const welcomeHTML = $("#chat-messages").innerHTML;
 const inspector = new window.AgentInspector();
-let lastShopView = "overview";
+const learningLab = new window.LearningLab(inspector);
+inspector.mount($("#developer-panel"));
+inspector.observeNetwork();
 
 function statsHTML() {
   const cards = [
@@ -98,7 +107,7 @@ function stockNudgeHTML() {
   const items = data.stock.products.filter((row) => row.needs_restock);
   if (!items.length) return `<div class="stock-nudge"><div><h3>Stock levels</h3><p>All products are above their reorder level.</p></div></div>`;
   const first = items[0];
-  return `<div class="stock-nudge"><div><h3>Low stock</h3><p>${escapeHTML(first.name)}: ${first.remaining_stock} remaining.</p></div><button class="text-button" data-go="inventory">View stock ${icon("arrow")}</button></div>`;
+  return `<div class="stock-nudge stock-warning"><svg class="stock-status-icon" aria-hidden="true"><use href="#i-warning"/></svg><div><h3>Low stock</h3><p>${escapeHTML(first.name)}: ${first.remaining_stock} remaining.</p></div><button class="text-button" data-go="inventory">View stock ${icon("arrow")}</button></div>`;
 }
 
 function inventoryHTML() {
@@ -118,19 +127,18 @@ function howItWorksHTML() {
   const steps = [
     ["You ask a question", "This browser sends your message to the Python backend through <code>/api/chat/stream</code>."],
     ["The backend checks the scope", "A separate local model call classifies the request. Unrelated topics receive app-written guidance and suggested questions; shop questions continue to the agent."],
-    ["Qwen3 chooses a tool", "Ollama runs the model on your Mac. The model can choose four business tools or a guidance tool for unsupported requests."],
+    ["Qwen3 chooses a tool", "Ollama runs the model on your Mac. The model can choose four business tools, two sales chart tools, or a guidance tool for unsupported requests."],
     ["Python runs the function", "Business tools read the CSV files and calculate results using exact decimal amounts. The guidance tool suggests supported questions without reading any records."],
-    ["The assistant explains the answer", "The model reads the tool’s result and writes a reply. Open the tool cards in the chat to inspect the actual inputs and returned records."],
+    ["The assistant explains the answer", "The model reads the tool’s result and writes a reply. The browser renders charts from validated tool data. Open Developer tools to inspect the actual inputs, returned records, and validation alongside the shop."],
   ];
   return `<section class="card"><div class="card-header"><div><h2>Request flow</h2><p class="card-subtitle">Try asking: “What was October’s profit?”</p></div></div><div class="flow-list">${steps.map(([title, description], index) => `<div class="flow-step"><span class="flow-number">${index + 1}</span><div><strong>${title}</strong><p>${description}</p></div></div>`).join("")}</div><p class="learning-footnote">The dashboard reads the same business functions directly. The chat lets the model choose them. Your local Qwen3 model uses no paid API. All names and transactions are fictional.<br><a href="/docs" target="_blank" rel="noopener">Explore the backend API documentation ↗</a></p></section><section class="card"><div class="card-header"><h2>Available tools</h2></div><div class="flow-list">${Object.entries(toolLabels).map(([name, label]) => `<div class="flow-step"><div><strong>${label}</strong><p><code>${name}</code></p></div></div>`).join("")}</div></section>`;
 }
 
 function renderBusiness() {
-  if (!data && currentView !== "agent-inspector") return;
-  const inspecting = currentView === "agent-inspector";
-  document.body.classList.toggle("inspecting", inspecting);
-  $("#chat-view-button").setAttribute("aria-pressed", String(!inspecting));
-  $("#inspector-view-button").setAttribute("aria-pressed", String(inspecting));
+  if (!data && currentView !== "learning-lab") return;
+  document.body.classList.toggle("learning", currentView === "learning-lab");
+  inspector.contextFeature = currentView === "learning-lab" ? learningLab.feature : null;
+  inspector.refresh();
   const [breadcrumb, title, description] = viewTitles[currentView];
   $("#breadcrumb-view").textContent = breadcrumb;
   $("#page-title").textContent = title;
@@ -140,8 +148,8 @@ function renderBusiness() {
     if (item.dataset.view === currentView) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
   });
-  if (inspecting) {
-    inspector.mount($("#business-content"));
+  if (currentView === "learning-lab") {
+    learningLab.mount($("#business-content"));
     return;
   }
   const views = {
@@ -156,14 +164,23 @@ function renderBusiness() {
 
 function navigate(event) {
   const requested = location.hash.slice(1) || "overview";
-  currentView = Object.hasOwn(viewTitles, requested) ? requested : "overview";
-  if (currentView !== "agent-inspector") lastShopView = currentView;
+  if (requested === "agent-inspector") {
+    historyReplaceInspectorRoute();
+    inspector.open("trace");
+  } else {
+    currentView = Object.hasOwn(viewTitles, requested) ? requested : "overview";
+    inspector.logClient("navigation", {view: currentView});
+  }
   renderBusiness();
   setNavigation(false);
   if (event) {
     $("#page-title").focus({preventScroll: true});
-    if (compactNavigation.matches) $(".page-heading").scrollIntoView({block: "start"});
+    if ($("#app-surface").classList.contains("app-compact")) $(".page-heading").scrollIntoView({block: "start"});
   }
+}
+
+function historyReplaceInspectorRoute() {
+  window.history.replaceState(null, "", `#${currentView}`);
 }
 
 async function loadDashboard() {
@@ -268,10 +285,9 @@ async function askQuestion(question) {
   turn.className = "chat-turn";
   const user = document.createElement("div"); user.className = "user-message"; user.textContent = message;
   const label = document.createElement("div"); label.className = "message-label"; label.textContent = "Assistant";
-  const trace = document.createElement("div"); trace.className = "tool-trace";
   const thinking = document.createElement("div"); thinking.className = "thinking"; thinking.innerHTML = '<span class="pulse"></span><span>Thinking about your question…</span>';
   const reply = document.createElement("div"); reply.className = "reply-body";
-  turn.append(user, label, trace, thinking, reply);
+  turn.append(user, label, thinking, reply);
   $("#chat-messages").append(turn);
   scrollChat();
   if (window.innerWidth <= 760) turn.scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth", block: "nearest" });
@@ -279,33 +295,35 @@ async function askQuestion(question) {
   const controller = new AbortController();
   activeController = controller;
   let completed = false;
-  const toolElements = new Map();
 
   function handleEvent(event) {
     inspector.record(runId, event);
     if (event.type === "status") thinking.lastElementChild.textContent = event.message;
     else if (event.type === "scope_start") thinking.lastElementChild.textContent = "Checking whether I can help…";
     else if (event.type === "tool_start") {
-      const details = document.createElement("details"); details.className = "tool-event";
-      const summary = document.createElement("summary");
-      const check = document.createElement("span"); check.className = "tool-check running"; check.textContent = "○";
-      summary.append(check, document.createTextNode(toolLabels[event.name] || event.name));
-      const code = document.createElement("pre"); code.textContent = `Function: ${event.name}\nInputs: ${JSON.stringify(event.args, null, 2)}\n\nWaiting for result…`;
-      details.append(summary, code); trace.append(details);
-      toolElements.set(event.id, { check, code, name: event.name, args: event.args });
-      thinking.lastElementChild.textContent = event.name === "redirect_to_shop" ? "Finding questions I can help with…" : "Reading the records…";
+      thinking.lastElementChild.textContent = toolLabels[event.name] || "Checking the shop records…";
     } else if (event.type === "tool_result") {
-      const tool = toolElements.get(event.id);
-      if (tool) {
-        tool.check.textContent = event.status === "error" ? "!" : "✓";
-        tool.check.classList.remove("running");
-        tool.code.textContent = `Function: ${tool.name}\nInputs: ${JSON.stringify(tool.args, null, 2)}\n\nResult:\n${JSON.stringify(event.result, null, 2)}`;
-      }
       thinking.lastElementChild.textContent = "Putting the answer together…";
     } else if (event.type === "answer") {
       completed = true;
       thinking.remove();
       renderReply(reply, event.reply);
+      if (event.artifact?.kind === "chart") {
+        const chart = event.artifact.chart;
+        const figure = document.createElement("div");
+        figure.className = "chat-chart";
+        const heading = document.createElement("h3"); heading.textContent = chart.title;
+        const plot = document.createElement("div"); plot.innerHTML = learningLab.chartHTML(chart, `chat-chart-${runId}`);
+        const values = document.createElement("details");
+        values.innerHTML = `<summary>Chart data</summary><div class="table-wrap" tabindex="0" role="region" aria-label="Chart data"><table class="data-table"><caption class="sr-only">${escapeHTML(chart.title)}</caption><thead><tr><th scope="col">${escapeHTML(chart.grouping)}</th><th scope="col">${escapeHTML(chart.unit)}</th></tr></thead><tbody>${chart.labels.map((name, i) => `<tr><td>${escapeHTML(name)}</td><td>${chart.unit === "GBP" ? money(chart.values[i]) : escapeHTML(chart.values[i])}</td></tr>`).join("")}</tbody></table></div>`;
+        figure.append(heading, plot, values);
+        const explanation = document.createElement("details"); explanation.className = "chat-chart-explanation";
+        const explanationLabel = document.createElement("summary"); explanationLabel.textContent = "Assistant explanation";
+        const explanationBody = document.createElement("div");
+        while (reply.firstChild) explanationBody.append(reply.firstChild);
+        explanation.append(explanationLabel, explanationBody);
+        reply.append(figure, explanation);
+      }
       if (event.suggested_questions?.length) {
         const suggestions = document.createElement("div");
         suggestions.className = "suggestions reply-suggestions";
@@ -322,7 +340,7 @@ async function askQuestion(question) {
         reply.append(suggestions);
       }
       const meta = document.createElement("div"); meta.className = "message-meta";
-      meta.textContent = `${event.duration_seconds}s · ${event.tool_calls.length} tool ${event.tool_calls.length === 1 ? "call" : "calls"} · Local model`;
+      meta.textContent = `${event.duration_seconds}s`;
       turn.append(meta);
       history.push({ role: "user", content: message }, { role: "assistant", content: event.reply });
       history = history.slice(-6);
@@ -358,18 +376,18 @@ async function askQuestion(question) {
     reply.textContent = error.name === "AbortError" ? "Response stopped." : error.message;
     const retry = document.createElement("button"); retry.textContent = "Try again"; retry.type = "button";
     retry.addEventListener("click", () => askQuestion(message)); reply.append(retry);
-    for (const tool of toolElements.values()) {
-      if (tool.check.classList.contains("running")) { tool.check.textContent = "–"; tool.check.classList.remove("running"); }
-    }
   } finally {
     activeController = null;
     setBusy(false);
-    scrollChat();
+    const chart = turn.querySelector(".chat-chart");
+    if (chart) chart.scrollIntoView({block: "start", behavior: "instant"});
+    else scrollChat();
     $("#chat-input").focus({ preventScroll: true });
   }
 }
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-inspector-toggle], [data-inspector-open]")) setNavigation(false);
   const questionButton = event.target.closest("[data-question]");
   if (questionButton) askQuestion(questionButton.dataset.question);
   const viewButton = event.target.closest("[data-go]");
@@ -398,15 +416,11 @@ $("#new-chat").addEventListener("click", () => {
   $("#chat-input").focus({ preventScroll: true });
 });
 $("#refresh-button").addEventListener("click", () => { loadDashboard(); checkHealth(); });
-$("#inspector-view-button").addEventListener("click", () => { location.hash = "agent-inspector"; });
-$("#chat-view-button").addEventListener("click", () => {
-  if (currentView === "agent-inspector") location.hash = lastShopView;
-  else $("#chat-input").focus({ preventScroll: true });
-});
 $("#period-select").addEventListener("change", loadDashboard);
 window.addEventListener("hashchange", navigate);
 navigate();
 loadDashboard();
 checkHealth();
 inspector.loadDefinition();
+learningLab.loadDefinition();
 setInterval(() => { if (!document.hidden) checkHealth(); }, 30000);

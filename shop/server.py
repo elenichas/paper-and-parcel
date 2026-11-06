@@ -15,7 +15,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from shop.agent import MODEL, OLLAMA_URL, agent_definition, stream_answer
+from shop.agent import MODEL, OLLAMA_URL, AgentAnswerError, agent_definition, stream_answer
+from shop.learning import learning_definition, stream_learning
+from shop.observability import log_event
 from shop.tools import (
     DATA_DIR, get_profit_summary, get_sales_summary, get_stock_status, get_unpaid_invoices,
 )
@@ -46,6 +48,10 @@ class ChatRequest(BaseModel):
         return value
 
 
+class LearningRequest(ChatRequest):
+    feature: Literal["report", "sql", "chart"]
+
+
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(ROOT / "web" / "index.html")
@@ -71,7 +77,12 @@ def dashboard():
 @app.get("/api/agent")
 def agent_setup():
     """Learning view: the app's actual model settings, instructions, and tool schemas."""
-    return agent_definition()
+    return {**agent_definition(), "learning": learning_definition()}
+
+
+@app.get("/api/learning/definition")
+def learning_setup():
+    return learning_definition()
 
 
 @app.get("/api/health")
@@ -107,10 +118,12 @@ async def _events(request: ChatRequest, endpoint: str = "/api/chat/stream"):
     history = _history(request)
 
     def stamped(event):
-        return {
+        result = {
             **event, "request_id": request_id,
             "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
         }
+        log_event(result)
+        return result
 
     yield stamped({
         "type": "request", "method": "POST", "endpoint": endpoint, "model": MODEL,
@@ -128,6 +141,11 @@ async def _events(request: ChatRequest, endpoint: str = "/api/chat/stream"):
         yield stamped({"type": "error", "message": "The local model is offline. Start Ollama and try again."})
     except TimeoutError:
         yield stamped({"type": "error", "message": "The local model took too long. Try a shorter question."})
+    except AgentAnswerError as error:
+        yield stamped({"type": "error", "message": str(error)})
+    except asyncio.CancelledError:
+        stamped({"type": "cancelled", "message": "Client disconnected."})
+        raise
     except Exception:
         logger.exception("Agent request failed")
         yield stamped({
@@ -159,6 +177,45 @@ async def chat(request: ChatRequest):
         elif event["type"] == "error":
             raise HTTPException(status_code=503, detail=event["message"])
     raise HTTPException(status_code=503, detail="No answer received.")
+
+
+async def _learning_events(request: LearningRequest):
+    started = time.monotonic()
+    request_id = uuid.uuid4().hex[:12]
+
+    def stamped(event):
+        result = {**event, "request_id": request_id, "elapsed_ms": round((time.monotonic() - started) * 1000, 1)}
+        log_event(result)
+        return result
+
+    yield stamped({"type": "request", "method": "POST", "endpoint": "/api/learning/stream", "model": MODEL, "feature": request.feature, "payload": {"message": request.message, "feature": request.feature}})
+    try:
+        async with asyncio.timeout(180):
+            if model_lock.locked():
+                yield stamped({"type": "status", "phase": "queue", "message": "Waiting for the local model…"})
+            async with model_lock:
+                async for event in stream_learning(request.feature, request.message):
+                    yield stamped(event)
+    except asyncio.CancelledError:
+        stamped({"type": "cancelled", "message": "Client disconnected."})
+        raise
+    except (httpx.ConnectError, ConnectionError):
+        yield stamped({"type": "error", "message": "The local model is offline. Start Ollama and try again."})
+    except TimeoutError:
+        yield stamped({"type": "error", "message": "This analysis took too long. Try one shorter question."})
+    except ValueError as error:
+        yield stamped({"type": "error", "message": str(error)})
+    except Exception:
+        logger.exception("Learning workflow failed")
+        yield stamped({"type": "error", "message": "The analysis could not finish. Check the trace and try an example question."})
+
+
+@app.post("/api/learning/stream")
+async def learning_stream(request: LearningRequest):
+    async def encoded_events():
+        async for event in _learning_events(request):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    return StreamingResponse(encoded_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 if __name__ == "__main__":

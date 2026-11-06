@@ -7,8 +7,10 @@ from unittest.mock import AsyncMock, patch
 from langchain_core.messages import AIMessage, ToolMessage
 
 from shop.agent import stream_answer
+from shop.analysis import aggregate_sales
 from shop.guidance import redirect_to_shop
 from shop.tools import get_sales_summary
+from shop.scope import ScopeDecision, classify_scope
 
 
 class FakeGraph:
@@ -36,6 +38,14 @@ class AgentVerificationTests(unittest.IsolatedAsyncioTestCase):
         self.scope = scope.start()
         self.addCleanup(scope.stop)
 
+    async def test_plain_revenue_question_cannot_inherit_chart_route(self):
+        for route in ["chart", "chart_clarification"]:
+            model = AsyncMock()
+            model.ainvoke.return_value = ScopeDecision(route=route)
+            with patch("shop.scope.get_scope_model", return_value=model):
+                self.assertEqual(await classify_scope("What was our October revenue?", []), "shop")
+                self.assertEqual(await classify_scope("Show October revenue by product as a bar chart.", []), route)
+
     async def test_scope_check_redirects_before_business_agent_runs(self):
         history = [{"role": "user", "content": "October profit?"}, {"role": "assistant", "content": "£218.40."}]
         for route in ["outside_scope", "unsupported_action", "capabilities"]:
@@ -50,6 +60,52 @@ class AgentVerificationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(events[-1]["tool_calls"], [])
             self.assertEqual(len(events[-1]["suggested_questions"]), 3)
             self.scope.assert_awaited_with("What is the weather in Greece?", history)
+
+    async def test_vague_chart_request_offers_choices_without_unverified_model_reply(self):
+        self.scope.return_value = "chart_clarification"
+        history = [{"role": "user", "content": "October revenue and profit?"}, {"role": "assistant", "content": "Revenue £439; profit £218.40."}]
+        with patch("shop.agent.get_agent") as agent:
+            events = [event async for event in stream_answer("create a graph to show me", history)]
+        agent.assert_not_called()
+        answer = events[-1]
+        self.assertEqual(answer["response_kind"], "guidance")
+        self.assertIn("What would you like", answer["reply"])
+        self.assertEqual(len(answer["suggested_questions"]), 3)
+        self.assertTrue(all("October" in question for question in answer["suggested_questions"]))
+
+    async def test_chart_request_returns_actual_validated_pandas_values(self):
+        self.scope.return_value = "chart"
+        class ChartGraph:
+            async def astream(self, *args, **kwargs):
+                call = {"name": "aggregate_sales", "args": {"group_by": "product", "metric": "revenue", "chart_type": "bar"}, "id": "chart", "type": "tool_call"}
+                yield {"model": {"messages": [AIMessage(content="", tool_calls=[call])]}}
+                yield {"tools": {"messages": [ToolMessage(content=json.dumps(aggregate_sales(**call["args"])), name=call["name"], tool_call_id=call["id"])]}}
+                yield {"model": {"messages": [AIMessage(content="October revenue by product.")]}}
+        with patch("shop.agent.get_agent", return_value=ChartGraph()):
+            events = [event async for event in stream_answer("Show October revenue by product as a bar chart.")]
+        answer = events[-1]
+        self.assertEqual(answer["response_kind"], "chart")
+        self.assertEqual(sum(answer["artifact"]["chart"]["values"]), 439.0)
+        self.assertEqual(answer["artifact"]["chart"]["labels"][0], "Weekly Planner")
+        self.assertTrue(any(event["type"] == "validation" and event["valid"] for event in events))
+
+    async def test_chart_request_without_chart_tool_result_returns_choices(self):
+        self.scope.return_value = "chart"
+        with patch("shop.agent.get_agent", return_value=FakeGraph(verify_on_retry=True)):
+            events = [event async for event in stream_answer("Show October revenue by product as a bar chart.")]
+        answer = events[-1]
+        self.assertEqual(answer["response_kind"], "guidance")
+        self.assertNotIn("artifact", answer)
+        self.assertIn("couldn’t generate", answer["reply"])
+        self.assertEqual(len(answer["suggested_questions"]), 3)
+
+    async def test_chart_missing_period_does_not_plot_october(self):
+        self.scope.return_value = "chart"
+        with patch("shop.agent.get_agent") as agent:
+            events = [event async for event in stream_answer("Show September revenue by product as a bar chart.")]
+        agent.assert_not_called()
+        self.assertNotIn("artifact", events[-1])
+        self.assertIn("unavailable", events[-1]["reply"])
 
     async def test_unrelated_question_after_shop_history_returns_guidance(self):
         class ScopeGraph:
